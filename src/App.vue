@@ -22,6 +22,7 @@ const rows = 8
 const bricks = ref(
     null // 42 briques
 );
+const acceleration = 1.01;
 
 function incrementScore() {
   score.value += 100;
@@ -99,8 +100,8 @@ function detectBrickCollision() {
       ) {
         brick.visible = false;
         ballDirection.value = 1;
-        ballXVelocity.value *= 1.02;
-        ballYVelocity.value *= 1.02;
+        ballXVelocity.value *= acceleration;
+        ballYVelocity.value *= acceleration;
         brickCollision();
 
         // Si la balle touche le côté gauche d'une brique
@@ -134,6 +135,34 @@ function brickCollision() {
   }
 }
 
+function checkPressedKeys(deltaTime){
+  if (keysPressed['ArrowLeft']) {
+    paddleX.value = Math.max(paddleWidth.value / 2, paddleX.value - paddleSpeed.value * deltaTime);
+  }
+  if (keysPressed['ArrowRight']) {
+    paddleX.value = Math.min(100 - paddleWidth.value / 2, paddleX.value + paddleSpeed.value * deltaTime);
+  }
+}
+
+function moveBall(deltaTime){
+  ballY.value += ballYVelocity.value * deltaTime * ballDirection.value;
+  ballX.value += ballXVelocity.value * deltaTime;
+}
+
+function checkBallAgainstWall(){
+  if (ballX.value <= 0) {
+    ballXVelocity.value = Math.abs(ballXVelocity.value) * acceleration;
+  }
+
+  if (ballX.value >= 99) {
+    ballXVelocity.value = Math.abs(ballXVelocity.value) * -acceleration;
+  }
+
+  if (ballY.value >= 100) {
+    setGameOver();
+  }
+}
+
 function update(timestamp) {
 
   if (!playing.value) {
@@ -143,39 +172,22 @@ function update(timestamp) {
   const deltaTime = (timestamp - lastTimestamp) / 1000;
   lastTimestamp = timestamp;
 
-  if (keysPressed['ArrowLeft']) {
-    paddleX.value = Math.max(paddleWidth.value / 2, paddleX.value - paddleSpeed.value * deltaTime);
-  }
-  if (keysPressed['ArrowRight']) {
-    paddleX.value = Math.min(100 - paddleWidth.value / 2, paddleX.value + paddleSpeed.value * deltaTime);
-  }
+  checkPressedKeys(deltaTime);
 
-  ballY.value += ballYVelocity.value * deltaTime * ballDirection.value;
-  ballX.value += ballXVelocity.value * deltaTime;
+  moveBall(deltaTime);
 
-  if (ballX.value <= 0) {
-    ballXVelocity.value = Math.abs(ballXVelocity.value) * 1.02;
-  }
-
-  if (ballX.value >= 99) {
-    ballXVelocity.value = Math.abs(ballXVelocity.value) * -1.02;
-  }
-
-  if (ballY.value >= 100) {
-    setGameOver();
-    return;
-  }
+  checkBallAgainstWall();
 
   if (detectPaddleCollision(ballX.value, ballY.value, 0)) {
     ballDirection.value = -1;
-    ballYVelocity.value *= 1.02;
+    ballYVelocity.value *= acceleration;
   }
 
   detectBrickCollision();
 
   if (ballY.value <= 0) {
     ballDirection.value = 1;
-    ballYVelocity.value *= 1.02;
+    ballYVelocity.value *= acceleration;
   }
 
   animationFrameId = requestAnimationFrame(update);
@@ -218,7 +230,6 @@ function getBrickColor(i) {
 }
 
 </script>
-
 <template>
   <div v-if="playing" class="main">
     <p class="score">Score: {{ score }}</p>
@@ -291,7 +302,7 @@ h1 {
 }
 
 .paddle {
-  height: .5%;
+  height: .5rem;
   background-color: white;
   top: 90%;
   position: absolute;
