@@ -10,9 +10,25 @@ const paddleX = ref(50);
 const paddleSpeed = ref(50);
 const ballX = ref(50);
 const ballY = ref(50);
-const ballDirection = ref(1);
+const ballYDirection = ref(1);
+const ballXDirection = ref(1);
 const ballYVelocity = ref(25);
 const ballXVelocity = ref(10);
+const ballSize = ref(6);
+
+const bonusVisible = ref(false);
+const bonusX = ref(0);
+const bonusY = ref(0);
+const bonusSpeed = ref(50);
+const bonusActive = ref(false);
+const bonusTime = ref(0);
+const bonusName = ref("");
+const initBonusTime = 10;
+
+const largePaddleBonusSize = 10;
+const fastPaddleBonusSpeed = 30;
+const slowBallBonusSpeed = -10;
+const largeBallBonusSizeMultiplier = 4;
 
 const keysPressed = reactive({});
 
@@ -22,7 +38,7 @@ const rows = 8
 const bricks = ref(
     null // 42 briques
 );
-const acceleration = 1.01;
+const ballAcceleration = 1.01;
 
 function incrementScore() {
   score.value += 100;
@@ -45,9 +61,9 @@ function start() {
   animationFrameId = requestAnimationFrame(update);
 }
 
-function win(){
+function win() {
 
-  if (paddleWidth.value === 2){
+  if (paddleWidth.value === 2) {
     setGameOver();
   }
 
@@ -83,59 +99,199 @@ function handleKeyUp(event) {
 }
 
 function detectPaddleCollision(x, y, width) {
-  return ((x - width / 2 <= paddleX.value + paddleWidth.value / 2 && x + width / 2 >= paddleX.value - paddleWidth.value / 2) && (y <= 90 && y >= 89))
+  return ((x <= paddleX.value + paddleWidth.value && x + width >= paddleX.value - paddleWidth.value / 2) && (y + width <= 90 && y + width >= 89))
 }
 
 function detectBrickCollision() {
   bricks.value.forEach((brick, index) => {
     if (brick.visible) {
-      const brickLeft = (index % 14) * (100 / 14);
+      const brickLeft = Math.floor(index % 14) * (100 / 14);
+      const brickRight = brickLeft + 100 / 14;
       const brickTop = Math.floor(index / 14) * (20 / 8);
+      const brickBottom = brickTop + 20 / 8;
+
+      const ballLeft = ballX.value;
+      const ballRight = ballX.value + ballSize.value;
+      const ballTop = ballY.value;
+      const ballBottom = ballY.value + ballSize.value;
 
       if (
-          ballX.value >= brickLeft &&
-          ballX.value <= brickLeft + 100 / 14 &&
-          ballY.value >= brickTop &&
-          ballY.value <= brickTop + 20 / 8
+          ballRight >= brickLeft &&
+          ballLeft <= brickRight &&
+          ballBottom >= brickTop &&
+          ballTop <= brickBottom
       ) {
         brick.visible = false;
-        ballDirection.value = 1;
-        ballXVelocity.value *= acceleration;
-        ballYVelocity.value *= acceleration;
-        brickCollision();
+        ballXVelocity.value *= ballAcceleration;
+        ballYVelocity.value *= ballAcceleration;
+        brickCollision(index);
+
+        // Si la balle touche le dessous d'une brique
+        if (
+            ballTop <= brickBottom + 2 &&
+            ballTop >= brickBottom - 2
+        ) {
+          ballYDirection.value = 1;
+        }
+
+        // Si la balle touche le dessus d'une brique
+        else if (
+            ballBottom >= brickTop - 2 &&
+            ballBottom <= brickTop + 2
+        ) {
+          ballYDirection.value = -1;
+        }
 
         // Si la balle touche le côté gauche d'une brique
         if (
-            (ballX.value >= brickLeft &&
-                ballX.value <= brickLeft + 2) &&
-            (ballY.value >= brickTop - 10 &&
-                ballY.value <= brickTop + 20 / 8 + 10)
+            ballRight >= brickLeft - 2 &&
+            ballRight <= brickLeft + 2
         ) {
-          ballXVelocity.value = Math.abs(ballXVelocity.value) * -1;
+          ballXDirection.value = -1;
         }
 
         // Si la balle touche le côté droit d'une brique
         else if (
-            (ballX.value >= brickLeft + 100 / 14 &&
-                ballX.value <= brickLeft + 100 / 14 - 2) &&
-            (ballY.value >= brickTop - 10 &&
-                ballY.value <= brickTop + 20 / 8 + 10)
+            ballLeft >= brickRight + 2 &&
+            ballLeft <= brickRight - 2
         ) {
-          ballXVelocity.value = Math.abs(ballXVelocity.value);
+          ballXDirection.value = 1;
         }
       }
     }
   });
 }
 
-function brickCollision() {
+function getBrickCoords(index) {
+  const x = Math.floor((index % 14) * (100 / 14) + (100 / 14) / 2);
+  const y = Math.floor((index / 14) * (20 / 8) + (20 / 8) / 2);
+  return {x, y};
+}
+
+function spawnBonus(coords) {
+  bonusVisible.value = true;
+  bonusX.value = coords["x"];
+  bonusY.value = coords["y"];
+  console.log("x", coords["x"], "y", coords["y"]);
+}
+
+function moveBonus(deltaTime) {
+
+  if (detectPaddleCollision(bonusX.value, bonusY.value, 0)) {
+    getBonus();
+    bonusVisible.value = false;
+    bonusX.value = 0;
+    bonusY.value = 0;
+    return;
+  }
+
+  if (bonusY.value <= 0) {
+    bonusVisible.value = false;
+  }
+
+  bonusY.value += bonusSpeed.value * deltaTime;
+}
+
+function getBonus() {
+  const bonusIndex = Math.floor(Math.random() * 5);
+  switch (bonusIndex) {
+    case 0:
+      largePaddleBonus();
+      break;
+
+    case 1:
+      fastPaddleBonus();
+      break;
+
+    case 2:
+      slowBallBonus();
+      break;
+
+    case 3:
+      missileBonus();
+      break;
+
+    case 4:
+      largeBallBonus();
+      break;
+  }
+}
+
+function largePaddleBonus() {
+  activateBonus("Large Paddle", largePaddleBonusDisable);
+  paddleWidth.value += largePaddleBonusSize;
+}
+
+function largePaddleBonusDisable() {
+  paddleWidth.value -= largePaddleBonusSize;
+}
+
+function fastPaddleBonus() {
+  activateBonus("Fast Paddle", fastPaddleBonusDisable);
+  paddleSpeed.value += fastPaddleBonusSpeed;
+}
+
+function fastPaddleBonusDisable() {
+  paddleSpeed.value -= fastPaddleBonusSpeed;
+}
+
+function slowBallBonus() {
+  activateBonus("Slow Ball", slowBallBonusDisable);
+  ballYVelocity.value += slowBallBonusSpeed;
+  ballXVelocity.value += slowBallBonusSpeed;
+}
+
+function slowBallBonusDisable() {
+  ballYVelocity.value -= slowBallBonusSpeed;
+  ballXVelocity.value -= slowBallBonusSpeed;
+}
+
+function missileBonus() {
+  activateBonus("Missiles", missileBonusDisable);
+}
+
+function missileBonusDisable() {
+
+}
+
+function largeBallBonus() {
+  activateBonus("Large Ball", largeBallBonusDisable);
+  ballSize.value *= largeBallBonusSizeMultiplier;
+}
+
+function largeBallBonusDisable() {
+  ballSize.value /= largeBallBonusSizeMultiplier;
+}
+
+function activateBonusTime(disableFunction) {
+  bonusTime.value = initBonusTime;
+  const interval = setInterval(() => {
+    bonusTime.value--;
+    if (bonusTime.value <= 0) {
+      bonusActive.value = false;
+      disableFunction();
+      clearInterval(interval);
+    }
+  }, 1000);
+}
+
+function activateBonus(name, disableFunction) {
+  bonusName.value = name;
+  activateBonusTime(disableFunction);
+  bonusActive.value = true;
+}
+
+function brickCollision(index) {
   incrementScore();
+
+  if (!bonusActive.value && Math.random() < .3) spawnBonus(getBrickCoords(index));
+
   if (!bricks.value.reduce((a, brick) => a = a || brick.visible, false)) {
     win();
   }
 }
 
-function checkPressedKeys(deltaTime){
+function checkPressedKeys(deltaTime) {
   if (keysPressed['ArrowLeft']) {
     paddleX.value = Math.max(paddleWidth.value / 2, paddleX.value - paddleSpeed.value * deltaTime);
   }
@@ -144,21 +300,28 @@ function checkPressedKeys(deltaTime){
   }
 }
 
-function moveBall(deltaTime){
-  ballY.value += ballYVelocity.value * deltaTime * ballDirection.value;
-  ballX.value += ballXVelocity.value * deltaTime;
+function moveBall(deltaTime) {
+  ballY.value += ballYVelocity.value * deltaTime * ballYDirection.value;
+  ballX.value += ballXVelocity.value * deltaTime * ballXDirection.value;
 }
 
-function checkBallAgainstWall(){
+function accelerateBall(){
+  ballXVelocity.value *= ballAcceleration;
+  bonusSpeed.value *= ballAcceleration;
+}
+
+function checkBallAgainstWall() {
   if (ballX.value <= 0) {
-    ballXVelocity.value = Math.abs(ballXVelocity.value) * acceleration;
+    accelerateBall()
+    ballXDirection.value = 1;
   }
 
-  if (ballX.value >= 99) {
-    ballXVelocity.value = Math.abs(ballXVelocity.value) * -acceleration;
+  if (ballX.value >= 99 - ballSize.value) {
+    accelerateBall()
+    ballXDirection.value = -1;
   }
 
-  if (ballY.value >= 100) {
+  if (ballY.value + ballSize.value >= 100) {
     setGameOver();
   }
 }
@@ -178,16 +341,20 @@ function update(timestamp) {
 
   checkBallAgainstWall();
 
-  if (detectPaddleCollision(ballX.value, ballY.value, 0)) {
-    ballDirection.value = -1;
-    ballYVelocity.value *= acceleration;
+  if (detectPaddleCollision(ballX.value, ballY.value, ballSize.value)) {
+    ballYDirection.value = -1;
+    ballYVelocity.value *= ballAcceleration;
   }
 
   detectBrickCollision();
 
   if (ballY.value <= 0) {
-    ballDirection.value = 1;
-    ballYVelocity.value *= acceleration;
+    ballYDirection.value = 1;
+    ballYVelocity.value *= ballAcceleration;
+  }
+
+  if (bonusVisible.value) {
+    moveBonus(deltaTime);
   }
 
   animationFrameId = requestAnimationFrame(update);
@@ -215,7 +382,7 @@ onUnmounted(() => {
 
 function getBrickColor(i) {
   const row = Math.floor(i / 14); // Ligne de la brique
-  switch (Math.trunc(row/2)) {
+  switch (Math.trunc(row / 2)) {
     case 0:
       return 'red';
     case 1:
@@ -243,8 +410,14 @@ function getBrickColor(i) {
             :style="{ visibility: brick.visible ? 'visible' : 'hidden' }">
         </div>
       </div>
-      <div class="ball" :style="{left: ballX + '%', top: ballY + '%'}"></div>
+      <div class="bonus" :style="{left: bonusX + '%', top: bonusY + '%'}" v-if="bonusVisible"></div>
+      <div class="ball"
+           :style="{left: ballX + '%', top: ballY + '%', height: ballSize + '%', width: ballSize + '%'}"></div>
       <div class="paddle" :style="{width: paddleWidth + '%', left: paddleX-(paddleWidth/2) + '%'}"></div>
+    </div>
+    <div class="bonus-panel" v-if="bonusActive">
+      <h2>{{ bonusName }}</h2>
+      <div class="bonus-time" :style="{width: bonusTime + '%'}"></div>
     </div>
   </div>
   <div v-else-if="gameOver" class="main">
@@ -272,11 +445,11 @@ body {
 }
 
 .game {
-  width: 70%;
+  width: 70vh;
   display: block;
-  margin: auto;
+  margin: 5% auto auto;
   position: relative;
-  height: 90vh;
+  height: 70vh;
   border: 5px solid white;
 }
 
@@ -302,15 +475,13 @@ h1 {
 }
 
 .paddle {
-  height: .5rem;
+  height: 1.5%;
   background-color: white;
   top: 90%;
   position: absolute;
 }
 
 .ball {
-  height: .5rem;
-  width: .5rem;
   position: absolute;
   background-color: red;
 }
@@ -349,6 +520,13 @@ h1 {
 .final-score {
   text-align: center;
   font-size: 3rem;
+}
+
+.bonus {
+  height: .5rem;
+  width: .5rem;
+  position: absolute;
+  background-color: limegreen;
 }
 
 
