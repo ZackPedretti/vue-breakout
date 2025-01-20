@@ -14,7 +14,7 @@ const ballYDirection = ref(1);
 const ballXDirection = ref(1);
 const ballYVelocity = ref(25);
 const ballXVelocity = ref(10);
-const ballSize = ref(6);
+const ballSize = ref(1.5);
 
 const bonusVisible = ref(false);
 const bonusX = ref(0);
@@ -25,10 +25,14 @@ const bonusTime = ref(0);
 const bonusName = ref("");
 const initBonusTime = 10;
 
-const largePaddleBonusSize = 10;
-const fastPaddleBonusSpeed = 30;
-const slowBallBonusSpeed = -10;
+const largePaddleBonusMultiplier = 2;
+const fastPaddleBonusMultiplier = 2;
+const slowBallBonusMultiplier = 0.5;
 const largeBallBonusSizeMultiplier = 4;
+
+const missileX = ref(0);
+const missileY = ref(0);
+const missileSpeed = 50;
 
 const keysPressed = reactive({});
 
@@ -36,7 +40,7 @@ let lastTimestamp = 0;
 
 const rows = 8
 const bricks = ref(
-    null // 42 briques
+    null
 );
 const ballAcceleration = 1.01;
 
@@ -51,6 +55,10 @@ function start() {
   paddleX.value = 50;
   ballX.value = 50;
   ballY.value = 50;
+  missileX.value = 0;
+  ballXDirection.value = 1;
+  ballYDirection.value = 1;
+  bonusActive.value = false;
   ballXVelocity.value = 10 + Math.random() * 10;
   ballYVelocity.value = 25;
   bricks.value = Array(14 * rows).fill(null).map(() => (
@@ -152,10 +160,22 @@ function detectBrickCollision() {
 
         // Si la balle touche le côté droit d'une brique
         else if (
-            ballLeft >= brickRight + 2 &&
-            ballLeft <= brickRight - 2
+            ballLeft >= brickRight - 2 &&
+            ballLeft <= brickRight + 2
         ) {
           ballXDirection.value = 1;
+        }
+      }
+
+      if(missileX.value !== 0 && missileX.value <= brickRight && missileX.value + 1.5 >= brickLeft && missileY.value - 1.5 <= brickTop && missileY.value + 1.5 <= brickBottom) {
+        brick.visible = false;
+        brickCollision(index);
+        if (!bonusActive.value) {
+          missileX.value = 0;
+        }
+        else{
+          missileX.value = paddleX.value;
+          missileY.value = 90;
         }
       }
     }
@@ -172,7 +192,6 @@ function spawnBonus(coords) {
   bonusVisible.value = true;
   bonusX.value = coords["x"];
   bonusY.value = coords["y"];
-  console.log("x", coords["x"], "y", coords["y"]);
 }
 
 function moveBonus(deltaTime) {
@@ -219,39 +238,39 @@ function getBonus() {
 
 function largePaddleBonus() {
   activateBonus("Large Paddle", largePaddleBonusDisable);
-  paddleWidth.value += largePaddleBonusSize;
+  paddleWidth.value *= largePaddleBonusMultiplier;
 }
 
 function largePaddleBonusDisable() {
-  paddleWidth.value -= largePaddleBonusSize;
+  paddleWidth.value /= largePaddleBonusMultiplier;
 }
 
 function fastPaddleBonus() {
   activateBonus("Fast Paddle", fastPaddleBonusDisable);
-  paddleSpeed.value += fastPaddleBonusSpeed;
+  paddleSpeed.value *= fastPaddleBonusMultiplier;
 }
 
 function fastPaddleBonusDisable() {
-  paddleSpeed.value -= fastPaddleBonusSpeed;
+  paddleSpeed.value /= fastPaddleBonusMultiplier;
 }
 
 function slowBallBonus() {
   activateBonus("Slow Ball", slowBallBonusDisable);
-  ballYVelocity.value += slowBallBonusSpeed;
-  ballXVelocity.value += slowBallBonusSpeed;
+  ballYVelocity.value *= slowBallBonusMultiplier;
+  ballXVelocity.value *= slowBallBonusMultiplier;
 }
 
 function slowBallBonusDisable() {
-  ballYVelocity.value -= slowBallBonusSpeed;
-  ballXVelocity.value -= slowBallBonusSpeed;
+  ballYVelocity.value /= slowBallBonusMultiplier;
+  ballXVelocity.value /= slowBallBonusMultiplier;
 }
 
 function missileBonus() {
+  missileX.value = paddleX.value;
   activateBonus("Missiles", missileBonusDisable);
 }
 
 function missileBonusDisable() {
-
 }
 
 function largeBallBonus() {
@@ -269,6 +288,8 @@ function activateBonusTime(disableFunction) {
     bonusTime.value--;
     if (bonusTime.value <= 0) {
       bonusActive.value = false;
+    }
+    if(!bonusActive.value) {
       disableFunction();
       clearInterval(interval);
     }
@@ -284,7 +305,7 @@ function activateBonus(name, disableFunction) {
 function brickCollision(index) {
   incrementScore();
 
-  if (!bonusActive.value && Math.random() < .3) spawnBonus(getBrickCoords(index));
+  if (!bonusActive.value && !bonusVisible.value && Math.random() < .3) spawnBonus(getBrickCoords(index));
 
   if (!bricks.value.reduce((a, brick) => a = a || brick.visible, false)) {
     win();
@@ -305,7 +326,7 @@ function moveBall(deltaTime) {
   ballX.value += ballXVelocity.value * deltaTime * ballXDirection.value;
 }
 
-function accelerateBall(){
+function accelerateBall() {
   ballXVelocity.value *= ballAcceleration;
   bonusSpeed.value *= ballAcceleration;
 }
@@ -323,6 +344,14 @@ function checkBallAgainstWall() {
 
   if (ballY.value + ballSize.value >= 100) {
     setGameOver();
+  }
+}
+
+function moveMissile(deltaTime){
+
+  missileY.value -= missileSpeed * deltaTime;
+  if (missileY.value <= 0) {
+    missileY.value = 90;
   }
 }
 
@@ -355,6 +384,10 @@ function update(timestamp) {
 
   if (bonusVisible.value) {
     moveBonus(deltaTime);
+  }
+
+  if(missileX.value !== 0) {
+    moveMissile(deltaTime);
   }
 
   animationFrameId = requestAnimationFrame(update);
@@ -413,11 +446,12 @@ function getBrickColor(i) {
       <div class="bonus" :style="{left: bonusX + '%', top: bonusY + '%'}" v-if="bonusVisible"></div>
       <div class="ball"
            :style="{left: ballX + '%', top: ballY + '%', height: ballSize + '%', width: ballSize + '%'}"></div>
+      <div class="missile orange" :style="{left: missileX + '%', top: missileY + '%'}" v-if="missileX !== 0" ></div>
       <div class="paddle" :style="{width: paddleWidth + '%', left: paddleX-(paddleWidth/2) + '%'}"></div>
     </div>
     <div class="bonus-panel" v-if="bonusActive">
       <h2>{{ bonusName }}</h2>
-      <div class="bonus-time" :style="{width: bonusTime + '%'}"></div>
+      <div class="bonus-time" :style="{width: (100 / initBonusTime) * bonusTime + '%', marginRight: 100 - (100 / initBonusTime) * bonusTime + '%'}"></div>
     </div>
   </div>
   <div v-else-if="gameOver" class="main">
@@ -435,7 +469,7 @@ function getBrickColor(i) {
 <style>
 
 * {
-  font-family: 'Press Start 2P', cursive;
+  font-family: 'Press Start 2P',serif;
 }
 
 body {
@@ -445,11 +479,11 @@ body {
 }
 
 .game {
-  width: 70vh;
+  width: min(80vh, 80vw);
+  height: min(80vh, 80vw);
   display: block;
   margin: 5% auto auto;
   position: relative;
-  height: 70vh;
   border: 5px solid white;
 }
 
@@ -529,5 +563,28 @@ h1 {
   background-color: limegreen;
 }
 
+.bonus-panel {
+  position: absolute;
+  top: 0;
+  right: 5%;
+  height: calc(90% - min(80vh, 80vw));
+  width: 20%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+
+.bonus-time {
+  height: 2.5rem;
+  background-color: white;
+}
+
+.missile{
+  position: absolute;
+  height: 1.5%;
+  width: 1.5%;
+}
 
 </style>
