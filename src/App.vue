@@ -44,8 +44,37 @@ const bricks = ref(
 );
 const ballAcceleration = 1.01;
 
-function incrementScore() {
-  score.value += 100;
+function incrementScore(n) {
+  score.value += n;
+}
+
+function playSound(src){
+  const audio = new Audio(src);
+  audio.play();
+}
+
+function playButtonSound() {
+  playSound("/sounds/buttons.wav");
+}
+
+function playBallCollisionSound() {
+  playSound("/sounds/hit-wall.wav");
+}
+
+function playBonusSound(){
+  playSound("/sounds/bonus.wav");
+}
+
+function playExplosionSound(){
+  playSound("/sounds/explosion.wav");
+}
+
+function playCountdownSound(){
+  playSound("/sounds/countdown.wav");
+}
+
+function playMissileSound(){
+  playSound("/sounds/missile-spawn.wav")
 }
 
 function start() {
@@ -61,9 +90,12 @@ function start() {
   bonusActive.value = false;
   ballXVelocity.value = 10 + Math.random() * 10;
   ballYVelocity.value = 25;
+  playButtonSound();
   bricks.value = Array(14 * rows).fill(null).map(() => (
       {visible: true}
   ));
+
+
 
   lastTimestamp = performance.now();
   animationFrameId = requestAnimationFrame(update);
@@ -95,6 +127,7 @@ function setGameOver() {
 function quit() {
   playing.value = false;
   gameOver.value = false;
+  playButtonSound();
   cancelAnimationFrame(animationFrameId);
 }
 
@@ -107,7 +140,7 @@ function handleKeyUp(event) {
 }
 
 function detectPaddleCollision(x, y, width) {
-  return ((x <= paddleX.value + paddleWidth.value && x + width >= paddleX.value - paddleWidth.value / 2) && (y + width <= 90 && y + width >= 89))
+  return ((x <= paddleX.value + paddleWidth.value / 2 && x + width >= paddleX.value - paddleWidth.value / 2) && (y + width <= 90 && y + width >= 89))
 }
 
 function detectBrickCollision() {
@@ -176,6 +209,7 @@ function detectBrickCollision() {
         else{
           missileX.value = paddleX.value;
           missileY.value = 90;
+          playMissileSound();
         }
       }
     }
@@ -212,6 +246,7 @@ function moveBonus(deltaTime) {
 }
 
 function getBonus() {
+  playBonusSound();
   const bonusIndex = Math.floor(Math.random() * 5);
   switch (bonusIndex) {
     case 0:
@@ -267,6 +302,7 @@ function slowBallBonusDisable() {
 
 function missileBonus() {
   missileX.value = paddleX.value;
+  playMissileSound();
   activateBonus("Missiles", missileBonusDisable);
 }
 
@@ -286,6 +322,7 @@ function activateBonusTime(disableFunction) {
   bonusTime.value = initBonusTime;
   const interval = setInterval(() => {
     bonusTime.value--;
+    playCountdownSound();
     if (bonusTime.value <= 0) {
       bonusActive.value = false;
     }
@@ -303,7 +340,14 @@ function activateBonus(name, disableFunction) {
 }
 
 function brickCollision(index) {
-  incrementScore();
+  playExplosionSound();
+
+  const row = Math.floor(index / 14);
+  const pointsPerRow = [400, 300, 200, 100];
+
+  const points = pointsPerRow[Math.trunc(row / 2)] || 100;
+
+  incrementScore(points);
 
   if (!bonusActive.value && !bonusVisible.value && Math.random() < .3) spawnBonus(getBrickCoords(index));
 
@@ -333,11 +377,13 @@ function accelerateBall() {
 
 function checkBallAgainstWall() {
   if (ballX.value <= 0) {
+    playBallCollisionSound();
     accelerateBall()
     ballXDirection.value = 1;
   }
 
   if (ballX.value >= 99 - ballSize.value) {
+    playBallCollisionSound();
     accelerateBall()
     ballXDirection.value = -1;
   }
@@ -371,6 +417,7 @@ function update(timestamp) {
   checkBallAgainstWall();
 
   if (detectPaddleCollision(ballX.value, ballY.value, ballSize.value)) {
+    playBallCollisionSound();
     ballYDirection.value = -1;
     ballYVelocity.value *= ballAcceleration;
   }
